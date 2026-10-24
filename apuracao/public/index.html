@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Apuração do segundo turno 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<style>
+:root {
+  --bg: #f5f6f7;
+  --surface: #ffffff;
+  --ink: #101114;
+  --muted: #6c7079;
+  --line: #e2e4e8;
+  --empty: #e5e7ea;
+  --live: #1b9a5f;
+  --err: #d64545;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0c0d10;
+    --surface: #14161a;
+    --ink: #eceef1;
+    --muted: #8a909b;
+    --line: #23262c;
+    --empty: #1b1e23;
+    --live: #3fd08f;
+    --err: #ef6b6b;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 15px/1.5 Geist, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-feature-settings: "tnum" 1;
+  -webkit-font-smoothing: antialiased;
+  padding: max(28px, env(safe-area-inset-top)) 22px max(36px, env(safe-area-inset-bottom));
+}
+.wrap { max-width: 1160px; margin: 0 auto; }
+
+/* Cabeçalho */
+.top {
+  display: flex; justify-content: space-between; align-items: flex-end;
+  gap: 16px; flex-wrap: wrap; margin-bottom: 40px;
+}
+.top p { margin: 0 0 4px; font-size: 14px; color: var(--muted); }
+h1 {
+  margin: 0; font-weight: 600; letter-spacing: -0.03em; line-height: 1.05;
+  font-size: clamp(28px, 4.2vw, 44px);
+}
+.tag {
+  display: inline-block; vertical-align: middle; margin-left: 10px;
+  font-size: 12px; font-weight: 500; letter-spacing: 0; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 99px; padding: 2px 10px;
+}
+.status { display: flex; align-items: center; gap: 9px; font-size: 13.5px; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.status.live .dot { background: var(--live); animation: pulse 2.4s ease-out infinite; }
+.status.error .dot { background: var(--err); }
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--live) 50%, transparent); }
+  70%, 100% { box-shadow: 0 0 0 8px transparent; }
+}
+
+/* Estrutura */
+main { display: grid; gap: 44px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 940px) {
+  main { grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr); gap: 64px; align-items: start; }
+}
+
+/* Mapa */
+.mapbox { position: relative; }
+svg#map { display: block; width: 100%; height: auto; max-height: 78vh; margin: 0 auto; }
+svg#map path {
+  fill: var(--empty); stroke: var(--bg); stroke-width: 0.9; cursor: pointer;
+  transition: fill 0.7s ease, fill-opacity 0.7s ease;
+}
+svg#map path:hover { stroke: var(--ink); stroke-width: 1.5; }
+svg#map path.sel { stroke: var(--ink); stroke-width: 1.8; }
+svg#map path:focus-visible { outline: none; stroke: var(--ink); stroke-width: 2; }
+.maperr { color: var(--muted); font-size: 14px; padding: 80px 0; text-align: center; }
+.under { margin-top: 18px; display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; }
+.under small { color: var(--muted); font-size: 12.5px; }
+.ext {
+  font: inherit; font-size: 13px; color: var(--ink); background: transparent; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 99px; padding: 5px 14px 5px 12px;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.ext:hover, .ext.sel { border-color: var(--ink); }
+.ext i { width: 8px; height: 8px; border-radius: 50%; background: var(--empty); }
+
+/* Placar */
+.split { display: flex; height: 10px; border-radius: 99px; overflow: hidden; background: var(--empty); margin: 0 0 6px; }
+.split span { height: 100%; transition: width 0.9s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.cand {
+  display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 16px;
+  align-items: center; padding: 22px 0; border-bottom: 1px solid var(--line);
+}
+.cand i { width: 10px; height: 10px; border-radius: 50%; }
+.who b { display: block; font-weight: 500; font-size: 17px; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.who small { color: var(--muted); font-size: 13px; }
+.who em {
+  font-style: normal; font-size: 12px; color: var(--bg); background: var(--ink);
+  border-radius: 99px; padding: 1px 9px; margin-left: 6px;
+}
+.num { text-align: right; }
+.pct { font-size: clamp(34px, 4.4vw, 46px); font-weight: 600; letter-spacing: -0.04em; line-height: 1; }
+.pct span { font-size: 0.42em; color: var(--muted); font-weight: 500; margin-left: 2px; letter-spacing: 0; }
+.votes { margin-top: 6px; font-size: 13px; color: var(--muted); }
+
+.prog { margin-top: 30px; }
+.prog .row { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; color: var(--muted); }
+.prog .row strong { color: var(--ink); font-weight: 500; }
+.track { height: 3px; background: var(--empty); border-radius: 3px; margin-top: 10px; overflow: hidden; }
+.track span { display: block; height: 100%; width: 0; background: var(--ink); transition: width 0.9s cubic-bezier(0.2, 0.7, 0.2, 1); }
+.facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 26px; }
+.facts div { font-size: 13px; color: var(--muted); }
+.facts b { display: block; margin-top: 2px; font-size: 16px; font-weight: 500; color: var(--ink); }
+.facts small { font-size: 12px; }
+
+/* Detalhe do estado */
+#detail { display: none; margin-top: 34px; padding: 6px 20px 8px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+#detail.on { display: block; }
+.dh { display: flex; justify-content: space-between; align-items: center; padding: 14px 0 10px; }
+.dh h2 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.dh button {
+  font: inherit; font-size: 20px; line-height: 1; color: var(--muted); background: none; border: 0; cursor: pointer; padding: 2px 6px;
+}
+.dh button:hover { color: var(--ink); }
+.mini { display: flex; justify-content: space-between; gap: 12px; padding: 11px 0; border-top: 1px solid var(--line); font-size: 14.5px; }
+.mini span:first-child { display: inline-flex; align-items: center; gap: 9px; min-width: 0; }
+.mini i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.mini small { color: var(--muted); font-size: 12.5px; margin-left: 6px; }
+.none { color: var(--muted); font-size: 14px; margin: 4px 0 14px; }
+
+/* Dica ao passar o mouse */
+.tip {
+  position: fixed; left: 0; top: 0; z-index: 10; pointer-events: none; min-width: 170px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 12px; font-size: 13px; opacity: 0; transition: opacity 0.12s;
+}
+.tip.on { opacity: 1; }
+.tip b { display: block; font-weight: 600; margin-bottom: 4px; }
+.tip .r { display: flex; justify-content: space-between; gap: 18px; }
+.tip i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 7px; }
+
+footer {
+  margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--line);
+  font-size: 12.5px; color: var(--muted); display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <p>Segundo turno, 25 de outubro de 2026</p>
+      <h1>Presidente da República<span class="tag" id="simtag" hidden>dados de teste</span></h1>
+    </div>
+    <div class="status" id="statusbox" role="status" aria-live="polite">
+      <span class="dot"></span><span id="status">Conectando ao TSE…</span>
+    </div>
+  </div>
+
+  <main>
+    <section class="mapbox" aria-label="Mapa por estado">
+      <svg id="map" viewBox="0 0 640 640" role="img" aria-label="Mapa do Brasil colorido pelo candidato à frente em cada estado"></svg>
+      <div class="under">
+        <small>A cor indica quem está à frente no estado. Quanto mais forte, maior a diferença.</small>
+        <button class="ext" id="ext" type="button"><i></i>Exterior</button>
+      </div>
+    </section>
+
+    <section aria-label="Resultado nacional">
+      <div class="split" id="split"></div>
+      <div id="cands"></div>
+
+      <div class="prog">
+        <div class="row"><span>Seções apuradas</span><strong id="secpct">—</strong></div>
+        <div class="track"><span id="trk"></span></div>
+        <div class="row" style="margin-top:8px"><span id="secs"></span></div>
+      </div>
+
+      <div class="facts">
+        <div>Votos válidos<b id="fv">—</b><small id="fvp"></small></div>
+        <div>Brancos<b id="fb">—</b><small id="fbp"></small></div>
+        <div>Nulos<b id="fn">—</b><small id="fnp"></small></div>
+      </div>
+
+      <div id="detail" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Dados da Justiça Eleitoral (TSE), atualizados a cada 30 segundos.</span>
+    <span>Projeto independente, sem vínculo oficial. O resultado oficial é o do TSE.</span>
+  </footer>
+</div>
+<div class="tip" id="tip"></div>
+
+<script>
+// <pure>
+const num = (s) => (s == null || s === '' ? 0 : Number(String(s).replace(',', '.')) || 0);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtInt = (n) => Number(n || 0).toLocaleString('pt-BR');
+const fmtPct = (n) => Number(n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const SMALL = new Set(['da', 'de', 'do', 'das', 'dos', 'e']);
+const titleCase = (s) =>
+  String(s || '').toLowerCase().split(' ')
+    .map((w, i) => (i > 0 && SMALL.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(' ');
+
+// Lê um arquivo "-u.json" (EA20) e devolve só o que o painel usa.
+function parseUnified(j) {
+  const carg = (j.carg || []).find((c) => c.cd === '1') || (j.carg || [])[0];
+  if (!carg) return null;
+  const cands = [];
+  (carg.agr || []).forEach((a) => (a.par || []).forEach((p) => (p.cand || []).forEach((c) => {
+    cands.push({
+      key: String(c.sqcand), seq: Number(c.seq) || 0, n: c.n, name: c.nmu || c.nm, party: p.sg,
+      votes: Number(c.vap) || 0, pct: num(c.pvapn ?? c.pvap), elected: c.e === 's',
+    });
+  })));
+  cands.sort((a, b) => a.seq - b.seq);
+  const s = j.s || {}, v = j.v || {};
+  return {
+    cands,
+    sections: { total: Number(s.ts) || 0, done: Number(s.st) || 0, pct: num(s.pstn ?? s.pst) },
+    votes: {
+      valid: Number(v.vv) || 0, pvalid: num(v.pvvn ?? v.pvv),
+      blank: Number(v.vb) || 0, pblank: num(v.pvbn ?? v.pvb),
+      nul: Number(v.tvn) || 0, pnul: num(v.ptvnn ?? v.ptvn),
+    },
+    final: j.tf === 's',
+    dt: j.dt || '', ht: j.ht || '',
+  };
+}
+
+// Quem está na frente e por quantos pontos.
+function leaders(d) {
+  if (!d) return null;
+  const tot = d.cands.reduce((a, c) => a + c.votes, 0);
+  if (!tot) return null;
+  const s = [...d.cands].sort((a, b) => b.votes - a.votes);
+  return { top: s[0], second: s[1], margin: s[0].pct - (s[1] ? s[1].pct : 0), tot };
+}
+
+// Carimbo que muda quando o TSE atualiza um estado (arquivo "-ab.json").
+const stampOf = (a) => `${a.dt} ${a.ht} ${a.s && a.s.st}`;
+// </pure>
+
+(() => {
+  'use strict';
+
+  /* Configuração: oficial por padrão; ?sim usa os dados de simulado do TSE para testar. */
+  const q = new URLSearchParams(location.search);
+  const SIM = q.has('sim');
+  const FILE = location.protocol === 'file:';
+  const CICLO = 'ele2026';
+  const ELE = SIM ? (q.get('sim') || '21270') : (q.get('ele') || '6258'); // 6258 = 2º turno, Presidente
+  const BASE = SIM
+    ? (FILE ? 'https://resultados-sim.tse.jus.br/simulado/simulado2026' : '/api/sim')
+    : (FILE ? 'https://resultados.tse.jus.br/oficial' : '/api/tse');
+  const E6 = 'e' + String(ELE).padStart(6, '0');
+  const INTERVAL = 30000;
+  const IBGE = 'https://servicodados.ibge.gov.br/api/v3/malhas/paises/BR?formato=application/vnd.geo+json&qualidade=minima&intrarregiao=UF';
+
+  const urlResult = (uf) => `${BASE}/${CICLO}/${ELE}/dados/${uf}/${uf}-c0001-${E6}-u.json`;
+  const urlTrack = () => `${BASE}/${CICLO}/${ELE}/dados/br/br-${E6}-ab.json`;
+
+  const UF = {
+    ac: 'Acre', al: 'Alagoas', ap: 'Amapá', am: 'Amazonas', ba: 'Bahia', ce: 'Ceará', df: 'Distrito Federal',
+    es: 'Espírito Santo', go: 'Goiás', ma: 'Maranhão', mt: 'Mato Grosso', ms: 'Mato Grosso do Sul',
+    mg: 'Minas Gerais', pa: 'Pará', pb: 'Paraíba', pr: 'Paraná', pe: 'Pernambuco', pi: 'Piauí',
+    rj: 'Rio de Janeiro', rn: 'Rio Grande do Norte', rs: 'Rio Grande do Sul', ro: 'Rondônia', rr: 'Roraima',
+    sc: 'Santa Catarina', sp: 'São Paulo', se: 'Sergipe', to: 'Tocantins', zz: 'Exterior',
+  };
+  const IBGE_UF = {
+    11: 'ro', 12: 'ac', 13: 'am', 14: 'rr', 15: 'pa', 16: 'ap', 17: 'to', 21: 'ma', 22: 'pi', 23: 'ce', 24: 'rn',
+    25: 'pb', 26: 'pe', 27: 'al', 28: 'se', 29: 'ba', 31: 'mg', 32: 'es', 33: 'rj', 35: 'sp', 41: 'pr',
+    42: 'sc', 43: 'rs', 50: 'ms', 51: 'mt', 52: 'go', 53: 'df',
+  };
+  const PALETTE = ['#2f4be0', '#ee7a1c', '#1f9d6a', '#a23bc4', '#d1356b', '#0e8aa1', '#c79a00', '#6b7dff', '#7aa51a', '#8b919b', '#e0556b', '#2ca6a4'];
+
+  const $ = (s) => document.querySelector(s);
+  const el = {
+    status: $('#status'), statusbox: $('#statusbox'), split: $('#split'), cands: $('#cands'),
+    secpct: $('#secpct'), trk: $('#trk'), secs: $('#secs'),
+    fv: $('#fv'), fvp: $('#fvp'), fb: $('#fb'), fbp: $('#fbp'), fn: $('#fn'), fnp: $('#fnp'),
+    detail: $('#detail'), tip: $('#tip'), map: $('#map'), ext: $('#ext'),
+  };
+  if (SIM) $('#simtag').hidden = false;
+
+  /* Estado em memória */
+  let national = null;
+  const states = {};        // uf -> dados já lidos
+  const stamps = {};        // uf -> último carimbo buscado
+  const retryAt = {};       // uf -> não tentar de novo antes disso (evita 404 em sequência)
+  const colors = new Map(); // sqcand -> cor
+  const paths = {};
+  let selected = null;
+  let busy = false;
+
+  const colorOf = (key) => colors.get(String(key)) || PALETTE[0];
+
+  async function getJSON(u) {
+    const r = await fetch(u, { cache: 'no-cache' });
+    if (r.status === 404) return { missing: true };
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }
+
+  function setStatus(kind, text) {
+    el.statusbox.className = 'status ' + kind;
+    el.status.textContent = text;
+  }
+
+  /* Placar nacional */
+  function renderNational(d) {
+    const total = d.cands.reduce((a, c) => a + c.votes, 0);
+    el.split.innerHTML = d.cands
+      .map((c) => `<span style="width:${total ? ((c.votes / total) * 100).toFixed(3) : 0}%;background:${colorOf(c.key)}"></span>`).join('');
+    el.cands.innerHTML = d.cands.map((c) => `
+      <div class="cand">
+        <i style="background:${colorOf(c.key)}"></i>
+        <div class="who"><b>${esc(titleCase(c.name))}</b><small>${esc(c.n)}, ${esc(c.party)}</small>${c.elected ? '<em>Eleito</em>' : ''}</div>
+        <div class="num"><div class="pct">${fmtPct(c.pct)}<span>%</span></div><div class="votes">${fmtInt(c.votes)} votos</div></div>
+      </div>`).join('');
+
+    el.secpct.textContent = fmtPct(d.sections.pct) + '%';
+    el.trk.style.width = Math.min(d.sections.pct, 100) + '%';
+    el.secs.textContent = `${fmtInt(d.sections.done)} de ${fmtInt(d.sections.total)} seções`;
+    el.fv.textContent = fmtInt(d.votes.valid); el.fvp.textContent = fmtPct(d.votes.pvalid) + '%';
+    el.fb.textContent = fmtInt(d.votes.blank); el.fbp.textContent = fmtPct(d.votes.pblank) + '%';
+    el.fn.textContent = fmtInt(d.votes.nul);   el.fnp.textContent = fmtPct(d.votes.pnul) + '%';
+  }
+
+  /* Mapa */
+  function paint(uf) {
+    const d = states[uf];
+    const L = leaders(d);
+    if (uf === 'zz') {
+      el.ext.querySelector('i').style.background = L ? colorOf(L.top.key) : '';
+      return;
+    }
+    const p = paths[uf];
+    if (!p) return;
+    if (!L) { p.style.fill = ''; p.style.fillOpacity = ''; return; }
+    const t = Math.min(Math.max(L.margin, 0) / 25, 1);
+    p.style.fill = colorOf(L.top.key);
+    p.style.fillOpacity = (0.36 + 0.64 * t).toFixed(2);
+  }
+
+  async function initMap() {
+    let gj = null;
+    try { gj = JSON.parse(localStorage.getItem('geo-ufs') || 'null'); } catch (e) { /* sem cache */ }
+    if (!gj) {
+      try {
+        const r = await fetch(IBGE);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        gj = await r.json();
+        try { localStorage.setItem('geo-ufs', JSON.stringify(gj)); } catch (e) { /* ignora */ }
+      } catch (e) {
+        el.map.outerHTML = '<div class="maperr">Não foi possível carregar o desenho do mapa agora. O placar continua funcionando.</div>';
+        return;
+      }
+    }
+    const proj = d3.geoMercator().fitExtent([[8, 8], [632, 632]], gj);
+    const path = d3.geoPath(proj);
+    const ns = 'http://www.w3.org/2000/svg';
+    gj.features.forEach((f) => {
+      const uf = IBGE_UF[Number(f.properties.codarea)];
+      if (!uf) return;
+      const p = document.createElementNS(ns, 'path');
+      p.setAttribute('d', path(f));
+      p.setAttribute('tabindex', '0');
+      p.setAttribute('role', 'button');
+      p.setAttribute('aria-label', UF[uf]);
+      p.dataset.uf = uf;
+      el.map.appendChild(p);
+      paths[uf] = p;
+    });
+    Object.keys(states).forEach(paint);
+    markSelected();
+  }
+
+  /* Detalhe e dica */
+  const rowsOf = (d) => d.cands.map((c) => `
+    <div class="mini"><span><i style="background:${colorOf(c.key)}"></i>${esc(titleCase(c.name))}</span>
+    <span>${fmtPct(c.pct)}%<small>${fmtInt(c.votes)}</small></span></div>`).join('');
+
+  function renderDetail() {
+    if (!selected) { el.detail.classList.remove('on'); el.detail.innerHTML = ''; return; }
+    const d = states[selected];
+    el.detail.classList.add('on');
+    el.detail.innerHTML =
+      `<div class="dh"><h2>${esc(UF[selected])}</h2><button type="button" data-close aria-label="Fechar">×</button></div>` +
+      (leaders(d) ? rowsOf(d) + `<div class="mini"><span>Seções apuradas</span><span>${fmtPct(d.sections.pct)}%</span></div>`
+            : '<p class="none">Ainda sem votos apurados neste local.</p>');
+  }
+
+  function markSelected() {
+    Object.entries(paths).forEach(([uf, p]) => p.classList.toggle('sel', uf === selected));
+    el.ext.classList.toggle('sel', selected === 'zz');
+  }
+  function select(uf) {
+    selected = selected === uf ? null : uf;
+    markSelected();
+    renderDetail();
+  }
+
+  function showTip(uf, e) {
+    const d = states[uf];
+    el.tip.innerHTML = `<b>${esc(UF[uf])}</b>` + (leaders(d)
+      ? d.cands.map((c) => `<div class="r"><span><i style="background:${colorOf(c.key)}"></i>${esc(titleCase(c.name).split(' ')[0])}</span><span>${fmtPct(c.pct)}%</span></div>`).join('')
+      : '<div class="r"><span>Sem votos apurados</span></div>');
+    el.tip.classList.add('on');
+    moveTip(e);
+  }
+  function moveTip(e) {
+    const w = el.tip.offsetWidth, h = el.tip.offsetHeight;
+    el.tip.style.left = Math.min(e.clientX + 16, innerWidth - w - 8) + 'px';
+    el.tip.style.top = Math.min(e.clientY + 16, innerHeight - h - 8) + 'px';
+  }
+
+  el.map.addEventListener('pointerover', (e) => {
+    const p = e.target.closest('path'); if (!p || e.pointerType !== 'mouse') return;
+    p.parentNode.appendChild(p); // traz o contorno para a frente
+    showTip(p.dataset.uf, e);
+  });
+  el.map.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse' && el.tip.classList.contains('on')) moveTip(e); });
+  el.map.addEventListener('pointerout', (e) => { if (e.target.closest('path')) el.tip.classList.remove('on'); });
+  el.map.addEventListener('click', (e) => { const p = e.target.closest('path'); if (p) select(p.dataset.uf); });
+  el.map.addEventListener('keydown', (e) => {
+    const p = e.target.closest('path');
+    if (p && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); select(p.dataset.uf); }
+  });
+  el.ext.addEventListener('click', () => select('zz'));
+  el.detail.addEventListener('click', (e) => { if (e.target.closest('[data-close]')) select(selected); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && selected) select(selected); });
+
+  /* Coleta */
+  async function fetchState(a) {
+    const uf = a.cdabr;
+    const j = await getJSON(urlResult(uf));
+    if (j.missing) { retryAt[uf] = Date.now() + 300000; return; }
+    const d = parseUnified(j);
+    if (!d) return;
+    states[uf] = d;
+    stamps[uf] = stampOf(a);
+    paint(uf);
+  }
+
+  async function tick() {
+    if (busy) return;
+    busy = true;
+    try {
+      const nat = await getJSON(urlResult('br'));
+      if (nat.missing) {
+        setStatus('', 'Aguardando o início da divulgação, a partir das 17h (horário de Brasília).');
+        return;
+      }
+      const d = parseUnified(nat);
+      if (!d) { setStatus('', 'Aguardando os primeiros dados do TSE.'); return; }
+      if (!colors.size) d.cands.forEach((c, i) => colors.set(c.key, PALETTE[i % PALETTE.length]));
+      national = d;
+      renderNational(d);
+
+      const ab = await getJSON(urlTrack());
+      if (!ab.missing) {
+        const todo = (ab.abr || []).filter((a) => a.tpabr === 'uf' && UF[a.cdabr] &&
+          stampOf(a) !== stamps[a.cdabr] && (retryAt[a.cdabr] || 0) < Date.now());
+        await Promise.all(todo.map((a) => fetchState(a).catch(() => {})));
+      }
+      renderDetail();
+
+      const started = d.sections.done > 0;
+      if (d.final) setStatus('live', 'Totalização final do TSE');
+      else if (!started) setStatus('', 'Aguardando os primeiros boletins de urna.');
+      else setStatus('live', `Ao vivo, totalização do TSE às ${d.ht}`);
+    } catch (err) {
+      setStatus('error', FILE
+        ? 'Sem acesso ao TSE. Se abriu o arquivo direto, rode "node server.js" e use localhost:3000.'
+        : 'Sem conexão com o TSE. Tentando de novo em instantes.');
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function loop() {
+    if (!document.hidden) await tick();
+    setTimeout(loop, INTERVAL);
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
+
+  initMap();
+  loop();
+})();
+</script>
+</body>
+</html>
